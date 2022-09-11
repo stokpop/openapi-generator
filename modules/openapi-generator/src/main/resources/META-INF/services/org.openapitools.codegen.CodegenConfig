@@ -73,6 +73,7 @@ org.openapitools.codegen.languages.JavascriptApolloClientCodegen
 org.openapitools.codegen.languages.JavascriptFlowtypedClientCodegen
 org.openapitools.codegen.languages.JavascriptClosureAngularClientCodegen
 org.openapitools.codegen.languages.JMeterClientCodegen
+org.openapitools.codegen.languages.JMeterClient2Codegen
 org.openapitools.codegen.languages.K6ClientCodegen
 org.openapitools.codegen.languages.LuaClientCodegen
 org.openapitools.codegen.languages.MarkdownDocumentationCodegen

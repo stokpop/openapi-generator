@@ -1,0 +1,126 @@
+import java.io.File
+import nl.stokpop.jmeter.*
+import nl.stokpop.jmeter.JmeterGenUtils.replaceSome
+import nl.stokpop.jmeter.domain.*
+import org.apache.jorphan.collections.HashTree
+import org.apache.jorphan.collections.ListedHashTree
+import org.apache.jmeter.testelement.TestPlan
+import org.apache.jmeter.config.ConfigTestElement
+import org.apache.jmeter.config.Arguments
+import org.apache.jmeter.control.TransactionController
+import org.apache.jmeter.protocol.http.control.CookieManager
+import org.apache.jmeter.threads.ThreadGroup
+import org.apache.jmeter.timers.GaussianRandomTimer
+
+println("Let's Generate!")
+val jmeterResourcesPath = if (args.size == 1) args[0] else "."
+JmeterGenComponents.initJmeter(File(jmeterResourcesPath))
+val tree: HashTree = generate()
+val pathname = "generated-script.jmx"
+JmeterGenComponents.writeJmeterScript(tree, File(pathname))
+
+fun generate(): HashTree {
+
+    val jmeterGen = JmeterGenComponents()
+    val tree: HashTree = ListedHashTree()
+    val testPlan: TestPlan = jmeterGen.createTestPlan("{{appName}}{{#version}} - {{{.}}}{{/version}}", "{{appDescription}}")
+    tree.add(testPlan)
+
+    val userDefinedVariables = listOf(
+        Variable("threads", "\${__P(threads,10)}", "Run with this many threads."),
+        Variable("rampup", "\${__P(rampup,10)}", "Ramp up in seconds."),
+        Variable("duration", "\${__P(duration,100)}", "Duration in seconds."),
+        Variable("testCases", "\${__P(testCases,100)}", "Number of test cases?"),
+        Variable("host", "\${__P(jmx.domain,localhost)}", "Host to call."),
+        Variable("port", "\${__P(port,8080)}", "Port to call."),
+        {{#apiInfo}}{{#apis}}{{#operations}}{{#operation}}
+        Variable("testData.{{operationId}}File", "\${__P(testData.{{operationId}}File,{{classname}}.csv)}", "Data file for {{operationId}}."),
+        {{/operation}}{{/operations}}{{/apis}}{{/apiInfo}}
+    )
+
+    val arguments: Arguments = jmeterGen.createArguments(userDefinedVariables)
+    tree.add(arguments)
+
+    val httpDefaultsGuiTestElement: ConfigTestElement =
+        jmeterGen.createHttpDefaults("http", "\${host}", "\${port}")
+    tree.add(httpDefaultsGuiTestElement)
+
+    val httpCookieManager: CookieManager = jmeterGen.createHttpCookieManager()
+    tree.add(httpCookieManager)
+
+    val threadGroup: ThreadGroup = jmeterGen.createThreadGroup(
+        name = "Thread Group - {{appName}}",
+        sampleErrorAction = SampleErrorAction.continueBox,
+        nrOfThreads = 5,
+        rampUpSeconds = 5,
+        loops = 100,
+        threadLifetime = ThreadLifeTime(true, 120, 0)
+    )
+
+    tree.add(threadGroup)
+
+    {{#apiInfo}}{{#apis}}{{#operations}}{{#operation}}
+    run {
+        val transactionController: TransactionController = jmeterGen.createTransactionController("{{operationId}}")
+        tree.add(threadGroup, transactionController)
+
+        val headers: List<Header> = listOf(
+            {{#headerParams}}Header("{{baseName}}", "\${__RandomString(10,qwertyuiopasdfghjklzxcvbnm)}"),{{/headerParams}}
+            {{#consumes.0}}Header("Content-Type", "{{{mediaType}}}"),{{/consumes.0}}
+            {{#produces.0}}Header("Accept", "{{{mediaType}}}"),{{/produces.0}}
+            {{#authMethods}}{{#isBasic}}
+            {{#isBasicBasic}}Header("Authorization", "Basic \${__P(basicBasicToken,token)}"),{{/isBasicBasic}}
+            {{#isBasicBearer}}Header("Authorization", "Bearer \${__P(basicBearerToken,token)}"),{{/isBasicBearer}}{{/isBasic}}
+            {{#isApiKey}}{{#isKeyInHeader}}Header("Authorization", "\${__P(apiKey,key)}"),{{/isKeyInHeader}}{{/isApiKey}}
+            {{#isOAuth}}Header("Authorization", "Bearer \${__P(oathToken,token)}"),{{/isOAuth}}{{/authMethods}}
+        )
+
+        val belowTransactionController = arrayOf(threadGroup, transactionController)
+
+        val queryParams: List<Argument> = listOf(
+            {{#queryParams}}Argument("{{paramName}}", {{=<% %>=}}"\${<% paramName %>}")<%={{ }}=%>,{{/queryParams}}
+        )
+        val bodyParams: List<Argument> = listOf(
+            {{#bodyParam}}Argument("{{paramName}}", replaceSome("{{paramName}}")),{{/bodyParam}}
+            {{#authMethods}}{{#isApiKey}}{{#isKeyInQuery}}Argument("{{keyParamName}}", "\${__P(apiKey,key)}"),{{/isKeyInQuery}}{{/isApiKey}}{{/authMethods}}
+        )
+
+        {{#requestBodyExamples}}val bodyContents = """
+{{{example}}}
+            """.trimIndent(){{/requestBodyExamples}}
+
+        val httpSamplerProxy = jmeterGen.createHttpSamplerProxy(
+            name = "{{operationId}} - \${testCase}",
+            comment = "{{summary}}{{#notes}} {{.}}{{/notes}}",
+            hasBody = {{hasBodyParam}},
+            method = "{{httpMethod}}",
+            path = "{{basePathWithoutHost}}{{vendorExtensions.x-path}}",
+            queryParams,
+            bodyParams{{#requestBodyExamples}},
+            bodyContents = bodyContents{{/requestBodyExamples}}
+        )
+        tree.add(belowTransactionController, httpSamplerProxy)
+
+        val headerManager = jmeterGen.createHeaderManager(headers)
+        tree.add(belowTransactionController, headerManager)
+
+        val timer: GaussianRandomTimer = jmeterGen.createGaussianRandomTimer()
+        tree.add(belowTransactionController, timer)
+
+        val responseAssertion = jmeterGen.createResponseAssertion()
+        tree.add(belowTransactionController, responseAssertion)
+
+        val csvDataSet = jmeterGen.createCsvDataSet(
+            "Load CSV Test Data - {{operationId}}",
+            "\${testData.{{operationId}}File}")
+
+        tree.add(arrayOf(threadGroup, transactionController, httpSamplerProxy), csvDataSet);
+
+    }
+    {{/operation}}{{/operations}}{{/apis}}{{/apiInfo}}
+
+    val resultCollector = jmeterGen.createResultCollector()
+    tree.add(resultCollector)
+
+    return tree
+}
