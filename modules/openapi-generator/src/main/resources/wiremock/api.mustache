@@ -1,0 +1,28 @@
+{
+  "mappings" : [
+  {{#operations}}{{#operation}}  {
+    "name" : "{{summary}}",
+    "request" : {
+      {{^pathParams}}
+      "urlPath" : "{{path}}",
+      {{/pathParams}}
+      {{#pathParams}}
+      "urlPathPattern" : "{{#lambdaReplacePathParams}}{{path}}{{/lambdaReplacePathParams}}",
+      {{/pathParams}}
+      "method" : "{{httpMethod}}"
+    },
+    "response" : {
+      "status" : 200,
+  {{^examples}}
+      "body" : ""
+  {{/examples}}
+  {{#examples}}{{#-first}}
+      "body" : "{{#lambdaRemoveLineBreak}}{{#lambdaEscapeDoubleQuote}}{{{example}}}{{/lambdaEscapeDoubleQuote}}{{/lambdaRemoveLineBreak}}",
+      "headers" : {
+        "Content-Type" : "{{contentType}}"
+      }
+  {{/-first}}{{/examples}}
+    }
+  }{{^-last}},{{/-last}}{{/operation}}{{/operations}}
+  ]
+}
