@@ -23,17 +23,14 @@ import io.swagger.v3.oas.models.Operation;
 import io.swagger.v3.oas.models.PathItem;
 import io.swagger.v3.oas.models.media.ArraySchema;
 import io.swagger.v3.oas.models.media.Schema;
-import org.openapitools.codegen.CodegenConfig;
-import org.openapitools.codegen.CodegenType;
-import org.openapitools.codegen.DefaultCodegen;
+import io.swagger.v3.oas.models.servers.Server;
+import org.openapitools.codegen.*;
+import org.openapitools.codegen.languages.features.DocumentationProviderFeatures;
 import org.openapitools.codegen.meta.features.*;
 import org.openapitools.codegen.utils.ModelUtils;
 
 import java.io.File;
-import java.util.Arrays;
-import java.util.EnumSet;
-import java.util.HashSet;
-import java.util.Map;
+import java.util.*;
 import java.util.regex.Matcher;
 
 public class WiremockCodegen extends DefaultCodegen implements CodegenConfig {
@@ -155,8 +152,15 @@ public class WiremockCodegen extends DefaultCodegen implements CodegenConfig {
         // add lambda for mustache templates
         additionalProperties.put("lambdaRemoveDoubleQuote", (Mustache.Lambda) (fragment, writer) -> writer
                 .write(fragment.execute().replaceAll("\"", Matcher.quoteReplacement(""))));
-        additionalProperties.put("lambdaEscapeDoubleQuote", (Mustache.Lambda) (fragment, writer) -> writer
-                .write(fragment.execute().replaceAll("\"", Matcher.quoteReplacement("\\\""))));
+        additionalProperties.put("lambdaEscapeDoubleQuote", (Mustache.Lambda) (fragment, writer) -> {
+            String text = fragment.execute();
+            // when the text is a quoted string, escape only the first and last double quote
+            String escapedText = text.startsWith("\"")
+                    ? "\\\"" + text.substring(1, text.length() - 1) + "\\\""
+                    : text.replaceAll("\"", Matcher.quoteReplacement("\\\""));
+
+            writer.write(escapedText);
+        });
         additionalProperties.put("lambdaRemoveLineBreak",
                 (Mustache.Lambda) (fragment, writer) -> writer.write(fragment.execute().replaceAll("\\r|\\n", "")));
         additionalProperties.put("lambdaReplacePathParams",
@@ -256,10 +260,21 @@ public class WiremockCodegen extends DefaultCodegen implements CodegenConfig {
     }
 
     @Override
-    public String escapeUnsafeCharacters(String input) {
-        return input.replace("*/", "*_/")
-                .replace("/*", "/_*")
-                .replace("\"", "\\\"");
+    public List<VendorExtension> getSupportedVendorExtensions() {
+        List<VendorExtension> extensions = super.getSupportedVendorExtensions();
+        extensions.add(VendorExtension.valueOf("x-performance"));
+        return extensions;
+    }
+
+    @Override
+    public CodegenOperation fromOperation(String path, String httpMethod, Operation operation, List<Server> servers) {
+        CodegenOperation codegenOperation = super.fromOperation(path, httpMethod, operation, servers);
+
+        if (codegenOperation.vendorExtensions.containsKey("x-performance")) {
+            codegenOperation.imports.add("performance");
+        }
+
+        return codegenOperation;
     }
 
 }
