@@ -27,6 +27,7 @@ import org.openapitools.codegen.CodegenType;
 import org.openapitools.codegen.DefaultCodegen;
 import org.openapitools.codegen.SupportingFile;
 import org.openapitools.codegen.meta.features.*;
+import org.openapitools.codegen.model.ModelsMap;
 import org.openapitools.codegen.utils.ModelUtils;
 
 import java.io.File;
@@ -169,7 +170,7 @@ public class JMeterClient2Codegen extends DefaultCodegen implements CodegenConfi
     }
 
     @Override
-    public Map<String, Object> postProcessAllModels(Map<String, Object> objs) {
+    public Map<String, ModelsMap> postProcessAllModels(Map<String, ModelsMap> objs) {
         return super.postProcessAllModels(objs);
     }
 
